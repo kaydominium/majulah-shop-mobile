@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:majulah_shop/screens/product_form.dart';
+import 'package:majulah_shop/widgets/left_drawer.dart';
 
 class MyHomePage extends StatelessWidget {
   MyHomePage({super.key});
@@ -27,6 +29,7 @@ class MyHomePage extends StatelessWidget {
         // Warna latar belakang AppBar diambil dari skema warna tema aplikasi.
         backgroundColor: Theme.of(context).colorScheme.primary,
       ),
+      drawer: LeftDrawer(),
       // Body halaman dengan padding di sekelilingnya.
       body: Padding(
         padding: const EdgeInsets.all(16.0),
@@ -157,6 +160,13 @@ class ItemCard extends StatelessWidget {
                 content: Text("Kamu telah menekan tombol ${item.name}!"),
               ),
             );
+          // Navigate ke route yang sesuai (tergantung jenis tombol)
+          if (item.name == "Create Product") {
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(builder: (context) => ProductFormPage()),
+            );
+          }
         },
         // Container untuk menyimpan Icon dan Text
         child: Container(

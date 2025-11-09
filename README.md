@@ -200,3 +200,47 @@ Ini adalah dua fitur produktivitas utama di Flutter.
 | **Hot Restart** | Cepat (beberapa detik) | **Direset/Hilang** | Perubahan besar, mengubah state, atau saat Hot Reload gagal. |
 
 </details>
+
+<details> 
+<summary>Tugas Individu 8</summary>
+
+### 1. Perbedaan `Navigator.push()` dan `Navigator.pushReplacement()`
+
+Kedua metode ini digunakan untuk berpindah antar halaman (Route), namun memiliki perilaku yang berbeda terhadap _stack_ (tumpukan) navigasi.
+
+- **`Navigator.push()`**: Menambahkan rute baru ke _atas_ stack navigasi saat ini. Pengguna dapat kembali ke halaman sebelumnya dengan menekan tombol _back_ (di Android) atau tombol kembali di `AppBar`.
+
+  - **Kapan digunakan di Majulah Shop?** Gunakan ini ketika pengguna bisa kembali ke halaman sebelumnya. Contohnya, jika pengguna menekan salah satu produk untuk melihat detailnya, gunakan `push()` agar mereka bisa kembali ke daftar produk setelah selesai melihat detail.
+
+- **`Navigator.pushReplacement()`**: Mengganti rute saat ini dengan rute baru di stack navigasi. Halaman sebelumnya dibuang dari stack, sehingga pengguna _tidak bisa_ kembali ke halaman tersebut dengan tombol _back_.
+  - **Kapan digunakan di Majulah Shop?** Ini sangat tepat digunakan untuk navigasi menu utama seperti yang sudah diimplementasikan di `LeftDrawer` dan `ItemCard` untuk "Create Product". Saat berpindah dari halaman "Home" ke "Create Product" melalui drawer, tombol _back_ membawa pengguna kembali ke menu drawer yang terbuka, melainkan langsung keluar aplikasi atau ke halaman utama yang sebenarnya.
+
+### 2. Pemanfaatan Hierarchy Widget untuk Konsistensi
+
+Dalam aplikasi Majulah Shop, kombinasi `Scaffold`, `AppBar`, dan `Drawer` digunakan untuk menciptakan kerangka (skeleton) halaman yang seragam:
+
+- **`Scaffold`**: Ini adalah fondasi utama setiap halaman. Baik `MyHomePage` maupun `ProductFormPage` menggunakan widget ini sebagai root dari tampilan. `Scaffold` menyediakan struktur dasar visual Material Design yang secara otomatis mengatur penempatan `AppBar`, `body`, dan `drawer`.
+- **`AppBar`**: Dengan menggunakan `AppBar` di dalam `Scaffold` pada setiap halaman memastikan setiap layar memiliki judul di posisi yang sama. Di `menu.dart`, `AppBar` menampilkan judul "Majulah Shop", sedangkan di `product_form.dart` menampilkan "Add Product Form". Konsistensi ini memudahkan pengguna mengenali konteks halaman.
+- **`Drawer` (LeftDrawer)**: Dengan menggunakan widget yang sama pada properti `drawer` di kedua halaman (`MyHomePage` dan `ProductFormPage`) menjamin menu navigasi selalu sama dimanapun pengguna berada.
+
+### 3. Kelebihan Layout Widget pada Form
+
+Dalam desain antarmuka, khususnya form, widget layout berikut sangat penting:
+
+- **`Padding`**: Memberikan jarak antara elemen dengan elemen lain atau dengan tepi layar agar tampilan tidak terkesan padat dan lebih mudah dibaca.
+  - _Contoh di aplikasi:_ Setiap `TextFormField` (seperti Name, Price, Description) dengan `Padding(padding: const EdgeInsets.all(8.0), ...)` agar input field tidak menempel satu sama lain dan memiliki ruang.
+- **`SingleChildScrollView`**: Memungkinkan konten untuk di-_scroll_ jika ukurannya melebihi tinggi layar. Ini sangat krusial untuk form, karena saat keyboard muncul di ponsel, area layar yang terlihat menjadi kecil. Tanpa widget ini, akan muncul error _overflow_ (garis kuning-hitam).
+  - _Contoh di aplikasi:_ Seluruh isi form di `ProductFormPage` dengan `SingleChildScrollView` agar pengguna tetap bisa mengisi form meski menggunakan perangkat berlayar kecil.
+- **`ListView`**: Mirip dengan `SingleChildScrollView` tetapi lebih optimal untuk daftar item yang panjang atau dinamis.
+  - _Contoh di aplikasi:_ `LeftDrawer` untuk menyusun daftar menu navigasi (`ListTile` untuk Home dan Create Product) secara vertikal.
+
+### 4. Penyesuaian Warna Tema (Branding)
+
+Penyesuaian warna tema agar aplikasi memiliki identitas visual yang konsisten dilakukan secara terpusat melalui widget `MaterialApp` di file `main.dart`.
+
+- **Tema Global:** Warna tema didefinisikan melalui `ThemeData` di `main.dart` dengan menggunakan `ColorScheme.fromSwatch(primarySwatch: Colors.red)` yang menjadi warna dasar brand toko.
+- **Penerapan pada Widget:**
+  - **AppBar:** Di `menu.dart`, `AppBar` dikonfigurasi untuk mengambil warna langsung dari skema tema utama menggunakan `Theme.of(context).colorScheme.primary`.
+  - **Drawer:** Bagian header pada `LeftDrawer` juga diatur langsung dari tema global, memastikan untuk selalu selaras jika warna brand utama berubah.
+  - **Form Halaman:** Halaman `ProductFormPage` menyesuaikan identitas visual dengan menggunakan `Colors.redAccent` pada `AppBar` untuk tetap memberikan nuansa merah yang konsisten.
+  </details>

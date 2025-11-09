@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:majulah_shop/menu.dart';
+import 'package:majulah_shop/screens/menu.dart';
 
 void main() {
   runApp(const MyApp());
@@ -17,6 +17,10 @@ class MyApp extends StatelessWidget {
         colorScheme: ColorScheme.fromSwatch(
           primarySwatch: Colors.red,
         ).copyWith(secondary: Colors.redAccent[400]),
+        appBarTheme: const AppBarTheme(
+          backgroundColor: Colors.red,
+          foregroundColor: Colors.white,
+        ),
       ),
       home: MyHomePage(),
     );
