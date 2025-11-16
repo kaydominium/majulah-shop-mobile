@@ -244,3 +244,227 @@ Penyesuaian warna tema agar aplikasi memiliki identitas visual yang konsisten di
   - **Drawer:** Bagian header pada `LeftDrawer` juga diatur langsung dari tema global, memastikan untuk selalu selaras jika warna brand utama berubah.
   - **Form Halaman:** Halaman `ProductFormPage` menyesuaikan identitas visual dengan menggunakan `Colors.redAccent` pada `AppBar` untuk tetap memberikan nuansa merah yang konsisten.
   </details>
+
+<details> 
+<summary>Tugas Individu 9</summary>
+
+## 1. Model Dart vs. `Map<String, dynamic>`
+
+Saat mengambil data JSON dari API (seperti yang terlihat di `all_product_list.dart`), data tersebut tiba sebagai `Map<String, dynamic>` setelah di-_decode_. Menggunakan _map_ ini secara langsung di seluruh aplikasi memiliki konsekuensi serius:
+
+- **Validasi Tipe (Type Safety):**
+
+  - **Tanpa Model:** `Map` tidak menjamin tipe data. Saat mengakses `data['price']`, tidak ada jaminan apakah itu `int`, `double`, atau `String`. Kesalahan asumsi tipe (misal, melakukan `data['price'] + 100` saat `data['price']` adalah `String "15000"`) akan menyebabkan _crash_ saat aplikasi berjalan (_runtime error_).
+  - **Dengan Model:** Sebuah model (seperti `ProductEntry` di `all_product_list.dart`) mendefinisikan tipe data secara eksplisit (misal `final int price;`). Proses _parsing_ di dalam `factory ProductEntry.fromJson(Map<String, dynamic> json)` menangani konversi dan validasi di satu tempat. Jika data API tidak sesuai, kegagalan terjadi secara terkendali saat _parsing_, bukan secara acak di UI.
+
+- **Null-Safety:**
+
+  - **Tanpa Model:** Tidak ada jaminan _key_ ada. Mencoba mengakses `data['description']` padahal _key_-nya tidak ada akan mengembalikan `null`. Jika kode selanjutnya mencoba menggunakan nilai ini (misal `data['description'].toUpperCase()`), aplikasi akan _crash_ (_NullPointerException_).
+  - **Dengan Model:** Model secara jelas mendefinisikan apa yang boleh `null` (misal `final String? description;`) dan apa yang tidak boleh (misal `final String name;`). _Compiler_ Dart kemudian akan memaksa penanganan nilai _nullable_ dengan aman di seluruh aplikasi.
+
+- **Maintainability (Perawatan Kode):**
+  - **Tanpa Model:** Akses data menggunakan _string_ literal (misal `data['product_name']`). Jika terjadi salah ketik (`data['prodct_name']`), _compiler_ tidak akan tahu, dan data hanya akan `null` (sulit di-debug).
+  - **Dengan Model:** Akses data menggunakan properti (misal `product.product_name`). Jika terjadi salah ketik (`product.prodct_name`), _compiler_ akan langsung memberi tahu "Error: Properti tidak ditemukan" _sebelum_ aplikasi dijalankan. Ini juga memungkinkan _autocomplete_ di IDE.
+
+## 2. Fungsi `http` vs. `CookieRequest`
+
+- **Package `http`:**
+
+  - Ini adalah _client_ HTTP dasar. Fungsinya adalah sebagai "mesin" untuk mengirim permintaan (GET, POST, dll.) ke URL dan menerima respons.
+  - Paket ini bersifat **stateless**. Setiap panggilan (`http.get(...)`) adalah transaksi independen. Ia tidak "mengingat" panggilan sebelumnya. Jika _login_ berhasil pada satu panggilan POST, panggilan GET berikutnya tidak akan tahu status _login_ tersebut.
+
+- **`CookieRequest` (dari `pbp_django_auth`):**
+  - Ini adalah _wrapper_ (pembungkus) yang **mengelola state (keadaan) autentikasi**.
+  - Peran utamanya adalah menangani _cookie_ sesi secara otomatis.
+  - Saat fungsi `request.login` (seperti di `login.dart`) berhasil, _server_ Django akan mengirim _header_ `Set-Cookie` berisi `sessionid`. `CookieRequest` akan **menyimpan** _cookie_ ini.
+  - Untuk semua permintaan berikutnya (seperti `request.get` di `all_product_list.dart` atau `request.postJson` di `register.dart`), `CookieRequest` akan **secara otomatis melampirkan** _cookie_ yang tersimpan itu.
+  - Django kemudian menerima _cookie_ ini, mengenali sesi pengguna, dan memberikan akses ke data yang dilindungi.
+
+**Perbedaan Peran:** `http` adalah kurir yang hanya mengantar paket satu kali. `CookieRequest` adalah kurir yang sama, tetapi juga memegang "kartu akses" (cookie) dan menunjukkannya setiap kali diperlukan untuk masuk ke gedung (server).
+
+## 3. Pentingnya Membagikan _Instance_ `CookieRequest`
+
+_Instance_ `CookieRequest` perlu dibagikan ke semua komponen karena _instance_ inilah yang **menyimpan state (keadaan) login**, yaitu _cookie_ sesi.
+
+- **Apa yang terjadi jika _tidak_ dibagikan?**
+
+  1.  Di `LoginPage`, sebuah `CookieRequest` **(Instance A)** dibuat.
+  2.  Pengguna _login_. `Instance A` menerima dan menyimpan `sessionid`.
+  3.  Aplikasi pindah ke `AllProductListPage`.
+  4.  `AllProductListPage` membuat `CookieRequest` baru **(Instance B)**.
+  5.  `Instance B` tidak memiliki `sessionid` yang didapat oleh `Instance A`.
+  6.  Saat `Instance B` mencoba mengambil data (`request.get`), Django akan merespons "401 Unauthorized" karena permintaan tersebut tidak memiliki _cookie_ autentikasi.
+
+- **Dengan berbagi _instance_ (misal menggunakan `Provider`):**
+  `LoginPage` dan `AllProductListPage` sama-sama mengakses _instance_ yang sama melalui `context.watch<CookieRequest>()`. Saat `LoginPage` _login_, _cookie_ disimpan di _instance_ tersebut. Saat `AllProductListPage` melakukan `request.get`, ia menggunakan _instance_ yang sama, yang sudah memiliki _cookie_, sehingga autentikasi berhasil.
+
+## 4. Konfigurasi Konektivitas Flutter ke Django
+
+Konfigurasi ini penting untuk menjembatani komunikasi antara _client_ (Flutter) dan _server_ (Django).
+
+- **`10.0.2.2` di `ALLOWED_HOSTS`:**
+
+  - **Mengapa?** Saat aplikasi Flutter berjalan di Android Emulator, `localhost` atau `127.0.0.1` merujuk ke _emulator itu sendiri_, bukan ke _host machine_ (laptop/PC) tempat server Django berjalan. Android menyediakan alamat IP alias `10.0.2.2` untuk "menjangkau keluar" dari emulator ke `localhost` milik _host machine_.
+  - **Konsekuensi:** Jika tidak ditambahkan, Django akan menerima permintaan dari _host_ `10.0.2.2`, yang tidak ada dalam daftar `ALLOWED_HOSTS`. Django akan memblokir permintaan ini dengan _error_ "DisallowedHost".
+
+- **Mengaktifkan CORS (Cross-Origin Resource Sharing):**
+
+  - **Mengapa?** Ini adalah fitur keamanan _browser_. Untuk Flutter Web, _client_ (misal `localhost:5000`) memiliki _origin_ (domain) yang berbeda dari _server_ (misal `localhost:8000`). CORS adalah cara server Django memberi tahu _browser_ bahwa "Domain `localhost:5000` diizinkan meminta data."
+  - **Konsekuensi:** Tanpa konfigurasi CORS yang benar di Django, _browser_ akan memblokir permintaan _cross-origin_ dari Flutter Web, dan akan muncul _error_ CORS di _console browser_.
+
+- **Pengaturan `SameSite`/Cookie:**
+
+  - **Mengapa?** Ini adalah atribut keamanan _cookie_ untuk mencegah serangan CSRF. _Browser_ modern mungkin membatasi pengiriman _cookie_ antar domain yang berbeda. Untuk autentikasi _cross-origin_ (Flutter Web), pengaturan seperti `SameSite='None'` dan `Secure=True` (memerlukan HTTPS) mungkin diperlukan agar _browser_ mau mengirim `sessionid`.
+  - **Konsekuensi:** Jika konfigurasi salah, _browser_ mungkin tidak akan mengirimkan `sessionid` kembali ke Django, sehingga Django menganggap pengguna belum _login_ di setiap permintaan.
+
+- **Izin Akses Internet di Android (`AndroidManifest.xml`):**
+  - **Mengapa?** Aplikasi Android berjalan di dalam _sandbox_ yang aman dan tidak diizinkan mengakses internet secara _default_ untuk melindungi privasi. Menambahkan `<uses-permission android:name="android.permission.INTERNET" />` secara eksplisit memberikan izin tersebut.
+  - **Konsekuensi:** Tanpa izin ini, _sistem operasi_ Android akan memblokir semua upaya aplikasi Flutter untuk melakukan panggilan jaringan. Aplikasi tidak akan pernah bisa menghubungi server Django, dan akan gagal dengan _error_ jaringan (misal, _SocketException_).
+
+## 5. Mekanisme Pengiriman Data (Input ke Display)
+
+Berikut alur pengiriman data, misalnya saat **Register**:
+
+1.  **Input (Flutter):** Pengguna memasukkan `username`, `password1`, dan `password2` ke dalam `TextFormField` di `RegisterPage`.
+2.  **Event (Flutter):** Pengguna menekan tombol "Register". Fungsi `onPressed` dipanggil.
+3.  **Serialisasi (Flutter):** Data dari _controller_ diambil dan disusun menjadi sebuah `Map`. `Map` ini diubah menjadi _string_ JSON menggunakan `jsonEncode`.
+4.  **Request (Flutter):** `CookieRequest` (via `request.postJson`) mengirimkan _string_ JSON tersebut sebagai _body_ dari HTTP POST ke _endpoint_ Django (`/auth/register/`).
+5.  **Processing (Django):** _View_ `register` di `views.py` menerima permintaan. Ia mem-parsing _body_ JSON (`json.loads(request.body)`).
+6.  **Validasi & Database (Django):** _View_ melakukan validasi (misal, password cocok, username belum ada). Jika lolos, `User.objects.create_user(...)` dipanggil untuk membuat dan menyimpan pengguna baru di _database_.
+7.  **Response (Django):** _View_ membuat `JsonResponse` (misal `{"status": "success", ...}`) dan mengirimkannya kembali ke Flutter sebagai balasan.
+8.  **State Update (Flutter):** Flutter (di `register.dart`) menerima respons. Jika `response['status'] == 'success'`, aplikasi menampilkan `SnackBar` dan melakukan navigasi (`Navigator.pushReplacement`) ke `LoginPage`.
+
+Alur serupa terjadi saat mengambil data: `request.get` dikirim (`all_product_list.dart`), Django merespons dengan JSON _list_ produk, Flutter mengubah JSON itu menjadi `List<ProductEntry>` menggunakan `ProductEntry.fromJson`, dan `FutureBuilder` menampilkannya di layar.
+
+## 6. Mekanisme Autentikasi (Login, Register, Logout)
+
+Mekanisme ini diatur oleh _file_ `views.py` di Django dan `login.dart`/`register.dart` di Flutter.
+
+### Register
+
+1.  **Flutter (`RegisterPage`):** Mengirim `username`, `password1`, dan `password2` sebagai JSON _body_ ke `/auth/register/`.
+2.  **Django (`views.py` - `register`):** Menerima JSON, memvalidasi data (password harus cocok, username unik). Jika valid, `User.objects.create_user()` dipanggil untuk membuat akun baru.
+3.  **Respon:** Django mengirim `JsonResponse` berisi status sukses. Flutter menampilkan `SnackBar` dan mengarahkan ke `LoginPage`.
+
+### Login
+
+1.  **Flutter (`LoginPage`):** Mengirim `username` dan `password` menggunakan `request.login` ke `/auth/login/`. (Ini adalah _helper_ dari `pbp_django_auth` yang mengirim data sebagai `form-data`).
+2.  **Django (`views.py` - `login`):** Menerima data. `authenticate()` digunakan untuk memverifikasi kredensial.
+3.  **Kunci Sesi:** Jika `authenticate()` berhasil, fungsi `auth_login(request, user)` dipanggil. Fungsi inilah yang **membuat _session_** di _database_ Django dan **mengirim _header_ `Set-Cookie`** (berisi `sessionid`) kembali ke _client_ sebagai bagian dari respons.
+4.  **Respon:** Django mengirim `JsonResponse` (misal `{"status": True, ...}`).
+5.  **Flutter (`CookieRequest`):** _Instance_ `CookieRequest` secara otomatis "menangkap" _header_ `Set-Cookie` dan **menyimpan `sessionid`** di dalam dirinya. Properti `request.loggedIn` kini menjadi `true`.
+6.  **Flutter (`LoginPage`):** Kode di `login.dart` memeriksa `if (request.loggedIn)`. Karena `true`, `Navigator.pushReplacement` dieksekusi untuk masuk ke `MyHomePage`.
+
+### Logout
+
+1.  **Flutter:** (Diasumsikan) Tombol _logout_ memanggil fungsi `request.logout` (dari `pbp_django_auth`) yang mengirim permintaan ke `/auth/logout/` (sesuai `urls.py`). `CookieRequest` **otomatis melampirkan** `sessionid` yang tersimpan.
+2.  **Django (`views.py` - `logout`):** Menerima permintaan. Karena ada `sessionid`, Django tahu siapa `request.user`. Fungsi `auth_logout(request)` dipanggil.
+3.  **Pemusnahan Sesi:** `auth_logout` menghapus _session_ dari _database_ Django, membuat `sessionid` yang lama tidak valid.
+4.  **Respon:** Django mengirim `JsonResponse` status sukses dan biasanya juga mengirim _header_ `Set-Cookie` untuk membersihkan _cookie_ di sisi _client_.
+5.  **Flutter (`CookieRequest`):** _Instance_ `CookieRequest` menghapus `sessionid` yang disimpannya. Properti `request.loggedIn` menjadi `false`.
+6.  **Flutter:** Aplikasi mengarahkan pengguna kembali ke `LoginPage`.
+
+Tentu. Berikut adalah langkah-langkah implementasi untuk membangun fungsionalitas yang dibahas (autentikasi dan pengambilan data) dari awal, dengan mengintegrasikan _file-file_ yang disediakan.
+
+---
+
+## 7. Implementasi Step-by-Step
+
+Proses ini dapat dibagi menjadi tiga fase utama: penyiapan Backend (Django), penyiapan Frontend (Flutter), dan implementasi fitur.
+
+### 1\. 🏛️ Fase Backend: Penyiapan Endpoint Django
+
+Langkah awal adalah memastikan _server_ siap menerima permintaan.
+
+1.  **Membuat Aplikasi Autentikasi:** Di proyek Django, sebuah aplikasi baru (misal `authentication`) dibuat.
+2.  **Definisi URL (`urls.py`):**
+    - Endpoint untuk _register_, _login_, dan _logout_ didefinisikan dalam `authentication/urls.py`.
+    - Path ini (`/login/`, `/register/`, `/logout/`) akan menjadi target URL yang dipanggil oleh Flutter.
+3.  **Implementasi Views (`views.py`):**
+    - **Register:** Dibuat _view_ `register` yang menangani `POST`. _View_ ini mem-parsing _body_ JSON, memeriksa kecocokan _password_, dan memastikan _username_ unik sebelum membuat pengguna baru via `User.objects.create_user`.
+    - **Login:** Dibuat _view_ `login`. _View_ ini menggunakan `authenticate` untuk memvalidasi kredensial. Jika berhasil, `auth_login` dipanggil. Ini adalah langkah krusial yang **membuat sesi** di _database_ dan **mengirim _header_ `Set-Cookie`** ke _client_ (Flutter).
+    - **Logout:** Dibuat _view_ `logout` yang memanggil `auth_logout`. Ini menghapus data sesi di _server_, membuat `sessionid` yang ada menjadi tidak valid.
+    - **Data Products:** Dibuat _view_ terpisah (misal di `main/views.py`, tidak ditampilkan) yang mengambil semua objek _Product_, men-serialisasinya, dan mengembalikannya sebagai `JsonResponse` (seperti yang dituju oleh `all_product_list.dart`).
+
+### 2\. 🌉 Fase Konfigurasi: Menghubungkan Keduanya
+
+Sebelum _coding_ di Flutter, konektivitas harus dipastikan.
+
+1.  **Konfigurasi Django (`settings.py`):**
+    - `'10.0.2.2'` ditambahkan ke `ALLOWED_HOSTS`. Ini penting agar _server_ Django tidak menolak permintaan yang datang dari Android Emulator.
+    - _Middleware_ CORS (seperti `django-cors-headers`) diinstal dan dikonfigurasi untuk mengizinkan _origin_ dari _client_ Flutter (penting untuk Flutter Web).
+2.  **Konfigurasi Flutter (Android):**
+    - Izin internet ditambahkan ke `android/app/src/main/AndroidManifest.xml` (`<uses-permission android:name="android.permission.INTERNET" />`). Tanpa ini, OS Android akan memblokir semua panggilan jaringan.
+
+### 3\. 📱 Fase Frontend: Implementasi Fitur Flutter
+
+1.  **Instalasi & Setup State:**
+
+    - _Package_ `pbp_django_auth` dan `provider` ditambahkan ke `pubspec.yaml`.
+    - Di `main.dart`, aplikasi dibungkus dengan `Provider` untuk `CookieRequest`. Ini menciptakan **satu _instance_ `CookieRequest`** yang akan dibagikan ke seluruh aplikasi.
+
+    <!-- end list -->
+
+    ```dart
+    // Di main.dart
+    Provider(
+        create: (_) {
+            CookieRequest request = CookieRequest();
+            return request;
+        },
+        child: MaterialApp(...)
+    )
+    ```
+
+2.  **Implementasi Model (`product_entry.dart`):**
+
+    - Dibuat _class_ `ProductEntry` untuk me-model-kan data produk.
+    - Dibuat _factory constructor_ `ProductEntry.fromJson(Map<String, dynamic> json)`. Ini adalah "penerjemah" yang mengubah `Map` dari JSON menjadi objek Dart yang aman secara tipe (_type-safe_).
+
+3.  **Implementasi Register (`register.dart`):**
+
+    - UI dibuat menggunakan `TextFormField` dan _controller_ untuk mengambil input.
+    - Di dalam `onPressed` _button_, _instance_ `CookieRequest` diambil menggunakan `context.watch<CookieRequest>()`.
+    - Sebuah `Map` dibuat, lalu diubah menjadi _string_ JSON menggunakan `jsonEncode`.
+    - `request.postJson(".../auth/register/", ...)` dipanggil dengan URL dari `urls.py` dan _body_ JSON.
+    - Respons diperiksa: jika `status == 'success'`, `SnackBar` ditampilkan dan navigasi ke `LoginPage` dilakukan menggunakan `Navigator.pushReplacement`.
+
+4.  **Implementasi Login (`login.dart`):**
+
+    - UI dibuat dengan `TextField` untuk _username_ dan _password_.
+    - `CookieRequest` diambil menggunakan `context.watch<CookieRequest>()`.
+    - `request.login(".../auth/login/", ...)` dipanggil. _Package_ `pbp_django_auth` menangani pengiriman data _form_ dan **secara otomatis menyimpan _cookie_** yang diterima dari Django.
+    - Status diperiksa: `if (request.loggedIn)` akan menjadi `true` jika `auth_login` di Django berhasil.
+    - Jika berhasil, `Navigator.pushReplacement` digunakan untuk memindahkan pengguna ke `MyHomePage` (menu utama).
+
+5.  **Implementasi Tampil Data (`all_product_list.dart` dan `my_product_list.dart`):**
+
+    - Halaman ini dibuat sebagai `StatefulWidget`.
+    - Dibuat fungsi `Future<List<ProductEntry>> fetchNews(CookieRequest request)`:
+      - Fungsi ini memanggil `await request.get('.../json/')`. Karena `request` adalah _instance_ yang sama dengan yang digunakan saat _login_, _cookie_ sesi akan terkirim secara otomatis.
+      - Data JSON di-loop, dan `ProductEntry.fromJson(d)` digunakan untuk membuat daftar objek model.
+    - Di dalam `build`, `FutureBuilder` digunakan.
+
+      - `future:` diatur untuk memanggil `fetchNews(request)`, di mana `request` didapat dari `context.watch<CookieRequest>()`.
+      - _Builder_ menangani status _snapshot_: menampilkan `CircularProgressIndicator` saat memuat, dan `ListView.builder` untuk menampilkan data jika `snapshot.hasData`.
+
+      Tidak seperti `all_product_list.dart` yang menampilkan _semua_ produk, `my_product_list.dart` dirancang untuk menampilkan produk yang "dimiliki" oleh pengguna yang sedang _login_.
+
+      Cara implementasinya adalah sebagai berikut:
+
+      1.  **Mengambil Semua Data:** Sama seperti sebelumnya, _file_ ini tetap memanggil _endpoint_ yang sama: `await request.get('http://localhost:8000/json/')`. Ini berarti aplikasi Flutter **tetap mengunduh _seluruh_ daftar produk** dari _database_.
+
+      2.  **Mengidentifikasi Pengguna:** Ini adalah langkah kuncinya. Setelah data diterima, kode mengambil nama pengguna yang sedang _login_ dari _instance_ `CookieRequest` itu sendiri: `final String? loggedInUsername = request.jsonData['username'];`.
+
+          - Data `username` ini kemungkinan besar disimpan di dalam `request.jsonData` saat proses _login_ berhasil (seperti yang terlihat di `login.dart`, di mana respons _login_ berisi _field_ `username`).
+
+      3.  **Melakukan Pemfilteran (Filtering):** Saat melakukan _looping_ pada semua data (`for (var d in data)`), ditambahkan sebuah kondisi `if`.
+
+      4.  **Logika Kondisi:** `if (d['username'] == loggedInUsername)`.
+
+          - Hanya produk yang _field_ `username`-nya (yang didapat dari JSON) **cocok** dengan `loggedInUsername` (yang disimpan di `CookieRequest`) yang akan diproses dan ditambahkan ke `myProductList`.
+          - Jika pengguna tidak _login_ (`loggedInUsername == null`), fungsi ini akan mengembalikan daftar kosong `[]`.
+
+      5.  **Menampilkan Hasil:** `FutureBuilder` kemudian hanya me-render `myProductList` yang berisi produk yang sudah difilter tersebut, dan `AppBar` menampilkan judul "My Products".
+
+</details>
